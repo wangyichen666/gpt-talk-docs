@@ -1,6 +1,6 @@
 # Agent Runtime / Codex 学习笔记
 
-这个目录用于整理关于 Agent Runtime、Codex Runtime、Harness、Rust、命令执行和 Sandbox 的讨论。
+这个目录用于整理本次关于 Agent Runtime、Codex Runtime、Harness、Agent Loop、Rust、命令执行和 Sandbox 的讨论。
 
 整理原则：**一个问题，一篇文档。**
 
@@ -28,7 +28,7 @@
 - Harness 和 Runtime 是否等价；
 - Harness 负责什么；
 - Runtime 为什么比 Harness 更大；
-- Agent Loop、Harness、Runtime、Platform 之间如何分层。
+- 为什么可以把 Harness 看成 Runtime 中的核心执行器。
 
 ---
 
@@ -46,83 +46,112 @@
 
 ---
 
-### 04. 为什么 Codex 使用 Rust？
+### 04. Codex 明明在宿主机执行命令，Sandbox 是怎么隔离的？
 
-文档：[`04-why-codex-uses-rust.md`](./04-why-codex-uses-rust.md)
+文档：[`04-how-codex-sandbox-isolates-host-processes.md`](./04-how-codex-sandbox-isolates-host-processes.md)
+
+主要回答：
+
+- Sandbox 是否会复制或移动 Workspace；
+- 宿主机真实进程为什么仍然可以被隔离；
+- 为什么最终权限可以理解为“用户权限 ∩ Sandbox Policy”；
+- Kernel 如何真正拦截文件和网络访问；
+- macOS Seatbelt 与 Linux namespace / bind mount / bubblewrap / seccomp 的思路；
+- Sandbox 和 Docker 的区别。
+
+---
+
+### 05. Agent Runtime、Harness、Agent Loop 到底是什么关系？
+
+文档：[`05-runtime-harness-agent-loop-relationship.md`](./05-runtime-harness-agent-loop-relationship.md)
+
+主要回答：
+
+- Agent Loop 是什么；
+- Harness 如何把 Loop 工程化；
+- Runtime 如何给 Harness 提供 Session、Workspace、Sandbox、权限和生命周期；
+- Platform、Runtime、Harness、Agent Loop、LLM、Tool 应该如何分层；
+- Tool 的声明和真正执行为什么不是一回事。
+
+---
+
+### 06. 为什么 Codex 使用 Rust？
+
+文档：[`06-why-codex-uses-rust.md`](./06-why-codex-uses-rust.md)
 
 主要回答：
 
 - Codex 为什么不只是一个普通 LLM 客户端；
 - 为什么 Coding Agent 的 Runtime 很接近系统软件；
 - Rust 为什么适合 Process、PTY、Filesystem、Sandbox 等底层能力；
-- Rust 的价值为什么主要在 Agent 执行层，而不是模型推理层。
+- 为什么 Rust 的价值主要在 Agent 执行层，而不是模型推理层；
+- Java、Python 与 Rust 分别适合 Agent 系统的哪些部分。
 
 ---
 
-### 05. Rust 用来做 Agent Runtime，真正的优势是什么？
+### 07. Rust 用来做 Agent Runtime，真正的优势是什么？
 
-文档：[`05-rust-advantages-for-agent-runtime.md`](./05-rust-advantages-for-agent-runtime.md)
+文档：[`07-rust-advantages-for-agent-runtime.md`](./07-rust-advantages-for-agent-runtime.md)
 
 主要回答：
 
 - Native、Memory Safety、Ownership、无 GC 的实际意义；
 - Rust 为什么适合资源生命周期和并发管理；
 - Rust async 为什么适合 Tool Runtime；
+- Rust 的类型系统为什么适合 Runtime 状态机和错误处理；
 - Rust 与 Java / Python / Node.js 在 Agent 系统中的优势区间；
 - Java Control Plane + Rust Runtime 这种架构为什么合理。
-
----
-
-### 06. Codex 的命令明明在宿主机执行，为什么还叫 Sandbox？
-
-文档：[`06-how-codex-sandbox-runs-on-host.md`](./06-how-codex-sandbox-runs-on-host.md)
-
-主要回答：
-
-- Sandbox 是否会复制 / 移动 workspace；
-- 宿主机真实进程为什么仍然可以被隔离；
-- 最终权限为什么可以理解为“用户权限 ∩ Sandbox Policy”；
-- OS Kernel 如何真正拦截文件和网络访问；
-- macOS 和 Linux 上的隔离思路；
-- bind mount、namespace 与真实 workspace 的关系；
-- Sandbox、Docker、虚拟机有什么区别。
 
 ---
 
 ## 推荐阅读顺序
 
 ```text
-01 Agent Runtime
+01 Agent Runtime 是什么
       ↓
 02 Runtime vs Harness
       ↓
-04 为什么 Codex 使用 Rust
+05 Runtime / Harness / Agent Loop 分层
       ↓
-05 Rust 的 Runtime 优势
+06 为什么 Codex 使用 Rust
+      ↓
+07 Rust 的 Runtime 优势
       ↓
 03 命令如何决定 Sandbox / Approval
       ↓
-06 Sandbox 为什么仍然运行在宿主机
+04 宿主机上的 Sandbox 到底怎么隔离
 ```
 
-读完之后，可以形成一条比较完整的理解链路：
+读完之后，可以形成一条完整的理解链路：
 
 ```text
-Agent
-  ↓
+Agent Platform
+      ↓
+Agent Runtime
+      ↓
+Agent Harness
+      ↓
 Agent Loop
-  ↓
-Harness
-  ↓
-Runtime
-  ↓
-Tool / exec_command
-  ↓
+      ↓
+LLM + Tools
+      ↓
+exec_command
+      ↓
 Execution Policy / Approval
-  ↓
+      ↓
 Sandbox
-  ↓
+      ↓
 OS Process
-  ↓
+      ↓
 Kernel
+```
+
+最值得记住的几个关系是：
+
+```text
+Harness = Agent 的核心执行引擎
+Runtime = Harness + Session / Workspace / Sandbox / Permission / Lifecycle 等运行环境
+Approval = 要不要先问用户
+Sandbox = 真正执行后能访问什么
+Rust = 更适合实现靠近 OS 的 Agent 执行基础设施
 ```
