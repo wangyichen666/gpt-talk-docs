@@ -1,6 +1,6 @@
 # Agent Runtime / Codex 学习笔记
 
-这个目录用于整理本次关于 Agent Runtime、Codex Runtime、Harness、Agent Loop、Rust、命令执行和 Sandbox 的讨论。
+这个目录用于整理本次关于 Agent Runtime、Codex Runtime、Harness、Agent Loop、Rust、命令执行、Sandbox、上下文和 Multi-Agent 的讨论。
 
 整理原则：**一个问题，一篇文档。**
 
@@ -104,6 +104,26 @@
 
 ---
 
+### 08. Codex 如何传递上下文、管理 Session，并实现多 Agent 协作？
+
+文档：[`08-codex-context-session-and-multi-agent-lifecycle.md`](./08-codex-context-session-and-multi-agent-lifecycle.md)
+
+这篇是基于 `openai/codex` 当前 `codex-rs` 源码整理的源码级分析，主要回答：
+
+- Thread、Session、Turn、Step 四层对象分别是什么；
+- `ContextManager` 如何保存一个 Agent 自己的模型历史；
+- 每次 Sampling Request 如何通过 `clone_history().for_prompt(...)` 构造模型上下文；
+- Thread 如何持久化、Compaction、Suspend、Resume 和 Recover；
+- Root Agent 与 Sub-agent 如何共享 SessionId、但保持独立 Thread / Context；
+- Fresh Spawn 和 Fork Spawn 如何传递不同程度的父上下文；
+- Fork 为什么必须过滤 Tool Call、Reasoning、授权信息和父 Agent 临时状态；
+- `InterAgentCommunication`、InputQueue、AgentPath、AgentGraph 和 Message Board 如何协作；
+- 如果自己用 Java 实现 Multi-Agent Runtime，可以如何借鉴 Codex 的数据模型和分层。
+
+文档内包含多张 Mermaid 架构图、生命周期图和时序图，可直接在 GitHub 中渲染查看。
+
+---
+
 ## 推荐阅读顺序
 
 ```text
@@ -112,6 +132,8 @@
 02 Runtime vs Harness
       ↓
 05 Runtime / Harness / Agent Loop 分层
+      ↓
+08 Codex Context / Session / Multi-Agent 源码分析
       ↓
 06 为什么 Codex 使用 Rust
       ↓
@@ -129,13 +151,19 @@ Agent Platform
       ↓
 Agent Runtime
       ↓
-Agent Harness
+ThreadManager
+      ↓
+CodexThread / Session
+      ↓
+ContextManager
+      ↓
+Turn / Step
       ↓
 Agent Loop
       ↓
 LLM + Tools
       ↓
-exec_command
+Multi-Agent Communication
       ↓
 Execution Policy / Approval
       ↓
@@ -151,7 +179,10 @@ Kernel
 ```text
 Harness = Agent 的核心执行引擎
 Runtime = Harness + Session / Workspace / Sandbox / Permission / Lifecycle 等运行环境
+Thread = 一个 Agent 的逻辑会话与身份边界
+ContextManager = 每个 Thread 独立维护的模型上下文
 Approval = 要不要先问用户
 Sandbox = 真正执行后能访问什么
+Multi-Agent = 独立 Context + Agent Graph + 显式消息 + 持久化 Thread
 Rust = 更适合实现靠近 OS 的 Agent 执行基础设施
 ```
